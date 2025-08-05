@@ -1,0 +1,221 @@
+#include "perceptron.h"
+
+// Crea un nuovo percettrone
+Perceptron* perceptron_create(int num_inputs, double learning_rate) {
+    Perceptron *p = malloc(sizeof(Perceptron));
+    if (!p) return NULL;
+    
+    p->weights = malloc(num_inputs * sizeof(double));
+    if (!p->weights) {
+        free(p);
+        return NULL;
+    }
+    
+    p->num_inputs = num_inputs;
+    p->learning_rate = learning_rate;
+    p->bias = 0.0;
+    
+    perceptron_initialize_weights(p);
+    return p;
+}
+
+// Distrugge il percettrone e libera la memoria
+void perceptron_destroy(Perceptron *p) {
+    if (p) {
+        if (p->weights) free(p->weights);
+        free(p);
+    }
+}
+
+// Inizializza i pesi con valori casuali piccoli
+void perceptron_initialize_weights(Perceptron *p) {
+    srand(time(NULL));
+    
+    for (int i = 0; i < p->num_inputs; i++) {
+        p->weights[i] = ((double)rand() / RAND_MAX) * 2.0 - 1.0; // [-1, 1]
+    }
+    p->bias = ((double)rand() / RAND_MAX) * 2.0 - 1.0;
+}
+
+// Funzione di attivazione (gradino unitario)
+double perceptron_activate(double sum) {
+    return sum >= 0.0 ? 1.0 : 0.0;
+}
+
+// Predice l'output per un dato input
+int perceptron_predict(Perceptron *p, double *inputs) {
+    double sum = p->bias;
+    
+    for (int i = 0; i < p->num_inputs; i++) {
+        sum += p->weights[i] * inputs[i];
+    }
+    
+    return (int)perceptron_activate(sum);
+}
+
+// Calcola l'output continuo (prima dell'attivazione)
+double perceptron_compute_output(Perceptron *p, double *inputs) {
+    double sum = p->bias;
+    
+    for (int i = 0; i < p->num_inputs; i++) {
+        sum += p->weights[i] * inputs[i];
+    }
+    
+    return sum;
+}
+
+// Training su un singolo campione
+void perceptron_train_single(Perceptron *p, double *inputs, int target) {
+    int prediction = perceptron_predict(p, inputs);
+    int error = target - prediction;
+    
+    // Aggiorna i pesi se c'è un errore
+    if (error != 0) {
+        for (int i = 0; i < p->num_inputs; i++) {
+            p->weights[i] += p->learning_rate * error * inputs[i];
+        }
+        p->bias += p->learning_rate * error;
+    }
+}
+
+// Training su un intero dataset
+int perceptron_train_dataset(Perceptron *p, Dataset *data, int max_epochs) {
+    int epoch;
+    int total_errors;
+    
+    printf("Inizio training...\n");
+    
+    for (epoch = 0; epoch < max_epochs; epoch++) {
+        total_errors = 0;
+        
+        // Passa attraverso tutti i campioni
+        for (int i = 0; i < data->num_samples; i++) {
+            int prediction = perceptron_predict(p, data->inputs[i]);
+            if (prediction != data->targets[i]) {
+                total_errors++;
+                perceptron_train_single(p, data->inputs[i], data->targets[i]);
+            }
+        }
+        
+        printf("Epoca %d: %d errori\n", epoch + 1, total_errors);
+        
+        // Se non ci sono errori, il training è completato
+        if (total_errors == 0) {
+            printf("Training completato dopo %d epoche!\n", epoch + 1);
+            return epoch + 1;
+        }
+    }
+    
+    printf("Training terminato dopo %d epoche con %d errori\n", max_epochs, total_errors);
+    return max_epochs;
+}
+
+// Stampa i pesi del percettrone
+void perceptron_print_weights(Perceptron *p) {
+    printf("Pesi: ");
+    for (int i = 0; i < p->num_inputs; i++) {
+        printf("w[%d]=%.3f ", i, p->weights[i]);
+    }
+    printf("bias=%.3f\n", p->bias);
+}
+
+// Crea un nuovo dataset
+Dataset* dataset_create(int num_samples, int num_features) {
+    Dataset *data = malloc(sizeof(Dataset));
+    if (!data) return NULL;
+    
+    data->inputs = malloc(num_samples * sizeof(double*));
+    data->targets = malloc(num_samples * sizeof(int));
+    
+    if (!data->inputs || !data->targets) {
+        free(data);
+        return NULL;
+    }
+    
+    for (int i = 0; i < num_samples; i++) {
+        data->inputs[i] = malloc(num_features * sizeof(double));
+        if (!data->inputs[i]) {
+            // Cleanup in caso di errore
+            for (int j = 0; j < i; j++) {
+                free(data->inputs[j]);
+            }
+            free(data->inputs);
+            free(data->targets);
+            free(data);
+            return NULL;
+        }
+    }
+    
+    data->num_samples = num_samples;
+    data->num_features = num_features;
+    return data;
+}
+
+// Distrugge il dataset
+void dataset_destroy(Dataset *data) {
+    if (data) {
+        if (data->inputs) {
+            for (int i = 0; i < data->num_samples; i++) {
+                if (data->inputs[i]) free(data->inputs[i]);
+            }
+            free(data->inputs);
+        }
+        if (data->targets) free(data->targets);
+        free(data);
+    }
+}
+
+// Aggiunge un campione al dataset
+void dataset_add_sample(Dataset *data, int index, double *inputs, int target) {
+    if (index >= 0 && index < data->num_samples) {
+        for (int i = 0; i < data->num_features; i++) {
+            data->inputs[index][i] = inputs[i];
+        }
+        data->targets[index] = target;
+    }
+}
+
+// Crea dataset per la funzione AND
+Dataset* dataset_create_and(void) {
+    Dataset *data = dataset_create(4, 2);
+    if (!data) return NULL;
+    
+    double inputs[4][2] = {{0,0}, {0,1}, {1,0}, {1,1}};
+    int targets[4] = {0, 0, 0, 1};
+    
+    for (int i = 0; i < 4; i++) {
+        dataset_add_sample(data, i, inputs[i], targets[i]);
+    }
+    
+    return data;
+}
+
+// Crea dataset per la funzione OR
+Dataset* dataset_create_or(void) {
+    Dataset *data = dataset_create(4, 2);
+    if (!data) return NULL;
+    
+    double inputs[4][2] = {{0,0}, {0,1}, {1,0}, {1,1}};
+    int targets[4] = {0, 1, 1, 1};
+    
+    for (int i = 0; i < 4; i++) {
+        dataset_add_sample(data, i, inputs[i], targets[i]);
+    }
+    
+    return data;
+}
+
+// Crea dataset per la funzione XOR (non linearmente separabile!)
+Dataset* dataset_create_xor(void) {
+    Dataset *data = dataset_create(4, 2);
+    if (!data) return NULL;
+    
+    double inputs[4][2] = {{0,0}, {0,1}, {1,0}, {1,1}};
+    int targets[4] = {0, 1, 1, 0};
+    
+    for (int i = 0; i < 4; i++) {
+        dataset_add_sample(data, i, inputs[i], targets[i]);
+    }
+    
+    return data;
+}
